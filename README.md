@@ -132,33 +132,58 @@ uv run python read_binary/casting_program_parser.py raw_data/2025-09-01.OPCB
 ### 2. Synchronize All Data (RECOMMENDED)
 
 ```bash
-uv run python read_binary/syncer.py
+# Sync all available dates
+uv run python data_ingest/read_binary/syncer.py
+
+# Sync specific date
+uv run python data_ingest/read_binary/syncer.py --date 2025-09-01
 ```
 
 This will:
 - Parse all available dates from raw data
 - Synchronize WistDB thermal data with OPCB process data
-- Create unified datasets with temperature sensors, cast length, end-of-cast events, sequence information, slabs grade, casting speed, width, DeltaTLoose, Ar flow/pressure, and casting program data
-- Save synchronized data to `parsed_files/synced/` as partitioned Parquet files (one file per date)
+- **Interpolate continuous parameters**: Uses time-based interpolation to fill all timestamps for continuous measurements (cast_length_m, rec_casting_speed, width_pv, deltatloose, ar_to_sen_flow, ar_to_sen_pressure, tundish_pos_rel)
+- **Merge discrete events**: Uses backward merge for event-based data (end_of_cast, sequence_id, slabs_grade, casting_program)
+- Create unified datasets with temperature sensors, cast length, end-of-cast events, sequence information, slabs grade, casting speed, width, DeltaTLoose, Ar flow/pressure, tundish position, and casting program data
+- Save synchronized data to `data_ingest/parsed_files/synced/` as partitioned Parquet files (one file per date)
 
-### 3. Analyze Data
+### 3. Clean Data (Extract Casting Runs)
 
 ```bash
-# Open Jupyter notebook for analysis
-jupyter notebook data_exploration/synced_exploration.ipynb
+# Clean all synced data
+uv run python data_ingest/data_cleaning/cleaning.py --input data_ingest/parsed_files/synced/ --output data_ingest/data_cleaning/cleaned_data/
+
+# Clean specific date
+uv run python data_ingest/data_cleaning/cleaning.py --input data_ingest/parsed_files/synced/2025-09-01.parquet --output data_ingest/data_cleaning/cleaned_data/
+```
+
+This extracts only casting runs (removes idle time, setup periods):
+- Filters data where `sequence_id` is not null and not 0
+- Keeps rows from sequence start until first `end_of_cast == 1`
+- Typically retains 34-40% of original data (only casting runs)
+
+### 4. Analyze Data
+
+```bash
+# Open Jupyter notebooks for analysis
+jupyter notebook data_ingest/data_exploration/synced_exploration.ipynb
+jupyter notebook data_ingest/data_exploration/single_day_ex.ipynb
 ```
 
 **Recommended: Use Polars for better performance**
 ```python
 import polars as pl
 
-# Load partitioned parquet files with Polars (faster than pandas)
-df = pl.scan_parquet('parsed_files/synced/*.parquet').collect()
+# Load cleaned casting runs (recommended for analysis)
+df = pl.scan_parquet('data_ingest/data_cleaning/cleaned_data/*.parquet').collect()
+
+# Or load all synced data
+df = pl.scan_parquet('data_ingest/parsed_files/synced/*.parquet').collect()
 
 # Or load specific dates
 df = pl.concat([
-    pl.read_parquet('parsed_files/synced/2025-09-01.parquet'),
-    pl.read_parquet('parsed_files/synced/2025-09-02.parquet')
+    pl.read_parquet('data_ingest/parsed_files/synced/2025-09-01.parquet'),
+    pl.read_parquet('data_ingest/parsed_files/synced/2025-09-02.parquet')
 ])
 
 # Convert to pandas only when needed
@@ -183,8 +208,10 @@ pandas_df = df.to_pandas()
 - **DeltaTLoose**: Temperature delta loose measurements
 - **Ar to SEN - flow**: Argon flow to Submerged Entry Nozzle
 - **Ar to SEN - pressure**: Argon pressure to Submerged Entry Nozzle
+- **Tundish Position (rel)**: Tundish position relative measurements
 - **Casting Program**: Casting program identifier
 - **Frequency**: Variable, synchronized to process events
+- **Interpolation**: Continuous parameters are interpolated to match thermal measurement timestamps
 
 ## 🛠️ Parser Modules
 
@@ -258,23 +285,31 @@ pandas_df = df.to_pandas()
 - Extracts casting program identification
 - Outputs: `parsed_files/OPCB/YYYY-MM-DD_casting_program.csv`
 
+### `tundish_pos_rel_parser.py`
+**Purpose**: Extract tundish position relative from .OPCB files
+- Extracts tundish position relative measurements
+- Outputs: `parsed_files/OPCB/YYYY-MM-DD_tundish_pos_rel.csv`
+
 ### `syncer.py`
 **Purpose**: Synchronize all data sources into unified datasets
 - Merges thermal data with process data using time-based alignment
-- Creates comprehensive datasets for analysis
+- **Time-based interpolation**: Intelligently interpolates continuous process parameters (cast_length_m, rec_casting_speed, width_pv, deltatloose, ar_to_sen_flow, ar_to_sen_pressure, tundish_pos_rel) between source timestamps to fill all target timestamps
+- **Backward merge**: Uses backward merge for discrete/event-based values (end_of_cast, sequence_id, slabs_grade, casting_program)
+- Creates comprehensive datasets for analysis with 100% non-null interpolated values
 - Outputs efficient Parquet files for better performance and compression
 - Creates partitioned dataset (one file per date) for scalability
 - Handles multiple dates automatically
 - Outputs: `parsed_files/synced/YYYY-MM-DD.parquet` (one file per date)
+- Usage: `uv run python data_ingest/read_binary/syncer.py [--date YYYY-MM-DD]`
 
 ### `data_cleaning/cleaning.py`
 **Purpose**: Extract casting runs from synchronized data
 - Filters data to extract only "run" data (actual casting operations)
 - Removes idle time, setup, and non-production periods
 - Uses `sequence_id` and `end_of_cast` flags to identify runs
-- Typically retains 55-60% of original data (only casting runs)
-- Outputs: `data_cleaning/cleaned_data/YYYY-MM-DD.parquet`
-- Usage: `uv run python data_cleaning/cleaning.py --input <input> --output <output>`
+- Typically retains 34-40% of original data (only casting runs)
+- Outputs: `data_ingest/data_cleaning/cleaned_data/YYYY-MM-DD.parquet`
+- Usage: `uv run python data_ingest/data_cleaning/cleaning.py --input <input> --output <output>`
 
 ## 🎯 Why Polars?
 
@@ -386,12 +421,15 @@ pandas_df = df.to_pandas()
 - `deltatloose`: Temperature delta loose
 - `ar_to_sen_flow`: Argon flow to Submerged Entry Nozzle
 - `ar_to_sen_pressure`: Argon pressure to Submerged Entry Nozzle
+- `tundish_pos_rel`: Tundish position relative
 - `casting_program`: Casting program identifier
 - `date`: Date partition column (for partitioned dataset)
 
 ### Data Quality
 - **Temporal alignment**: All data synchronized to common timestamps
-- **Missing data**: Filled with NaN where appropriate
+- **Interpolation**: Continuous parameters (cast_length_m, rec_casting_speed, width_pv, deltatloose, ar_to_sen_flow, ar_to_sen_pressure, tundish_pos_rel) are interpolated using time-based interpolation to ensure 100% non-null values
+- **Event merging**: Discrete events (end_of_cast, sequence_id, slabs_grade, casting_program) use backward merge to propagate values forward
+- **Missing data**: Filled with NaN only where no source data exists
 - **Time coverage**: Full 24-hour periods
 - **Sensor count**: 71 temperature sensors per record
 
@@ -399,7 +437,11 @@ pandas_df = df.to_pandas()
 
 ### Process Single Date
 ```bash
-uv run python read_binary/syncer.py
+# Sync all dates
+uv run python data_ingest/read_binary/syncer.py
+
+# Sync specific date
+uv run python data_ingest/read_binary/syncer.py --date 2025-09-01
 ```
 
 ### Process Specific Dates (via Python)
@@ -557,8 +599,8 @@ uv sync
 ### Data Cleaning Workflow
 
 **Recommended workflow for analysis:**
-1. **Raw Processing**: Run `main.py` to parse and synchronize all data
-2. **Data Cleaning**: Use `cleaning.py` to extract only casting runs
+1. **Sync Data**: Run `syncer.py` to synchronize and interpolate all data sources
+2. **Data Cleaning**: Use `cleaning.py` to extract only casting runs (removes idle time)
 3. **Analysis**: Use cleaned data for vectorization and ML models
 
 ```bash
@@ -566,11 +608,11 @@ uv sync
 uv run python main.py
 
 # Step 2: Clean the synced data
-uv run python data_cleaning/cleaning.py --input parsed_files/synced/ --output data_cleaning/cleaned_data/
+uv run python data_ingest/data_cleaning/cleaning.py --input data_ingest/parsed_files/synced/ --output data_ingest/data_cleaning/cleaned_data/
 
 # Step 3: Use cleaned data for analysis
 import polars as pl
-df = pl.read_parquet('data_cleaning/cleaned_data/2025-09-02.parquet')
+df = pl.read_parquet('data_ingest/data_cleaning/cleaned_data/2025-09-02.parquet')
 ```
 
 ### Custom Analysis
@@ -599,4 +641,5 @@ The system extracts the following channels from OPCB files:
 | `deltatloose` | Temperature delta loose | `*_deltatloose.csv` |
 | `ar_to_sen_flow` | Argon flow to SEN | `*_ar_to_sen_flow.csv` |
 | `ar_to_sen_pressure` | Argon pressure to SEN | `*_ar_to_sen_pressure.csv` |
+| `tundish_pos_rel` | Tundish position relative | `*_tundish_pos_rel.csv` |
 | `casting_program` | Casting program identifier | `*_casting_program.csv` |

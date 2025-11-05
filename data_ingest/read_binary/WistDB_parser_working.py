@@ -28,7 +28,7 @@ class WistDBParser:
         Args:
             filepath: Input .WistDB file path
             suffix: Suffix to add (e.g., 'full_resolution')
-            with_extension: Whether to include .csv extension
+            with_extension: Whether to include .parquet extension
             
         Returns:
             Output file path in parsed_files folder
@@ -45,7 +45,7 @@ class WistDBParser:
         
         # Generate output filename
         if with_extension:
-            output_filename = f"{date_part}_{suffix}.csv"
+            output_filename = f"{date_part}_{suffix}.parquet"
         else:
             output_filename = f"{date_part}_{suffix}"
         
@@ -291,10 +291,10 @@ class WistDBParser:
         output_dir = Path("parsed_files/WistDB_files")
         output_dir.mkdir(parents=True, exist_ok=True)
         
-        # Create output filename: date_wistDB_bfl.csv
-        output_file = output_dir / f"{date_part}_wistDB_bfl.csv"
+        # Create output filename: date_wistDB_bfl.parquet
+        output_file = output_dir / f"{date_part}_wistDB_bfl.parquet"
         
-        final_df.to_csv(output_file, index=False)
+        final_df.to_parquet(output_file, index=False, engine='pyarrow')
         print(f"BFL-only analysis saved to: {output_file}")
         print(f"DataFrame shape: {final_df.shape}")
         
@@ -302,6 +302,10 @@ class WistDBParser:
         print(f"Time coverage: {final_df['datetime'].min()} to {final_df['datetime'].max()}")
         duration = final_df['datetime'].max() - final_df['datetime'].min()
         print(f"Duration: {duration}")
+        
+        # Create/update metadata for WistDB files
+        from create_metadata_utils import update_parser_metadata
+        update_parser_metadata(output_dir, 'wistDB_bfl', date_part)
         
         return final_df
     

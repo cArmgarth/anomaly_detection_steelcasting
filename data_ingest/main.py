@@ -135,7 +135,8 @@ def process_date(date: str, skip_existing: bool = False) -> bool:
         ("read_binary/ar_to_sen_flow_parser.py", f"raw_data/{date}.OPCB", "Ar to SEN - flow data"),
         ("read_binary/ar_to_sen_pressure_parser.py", f"raw_data/{date}.OPCB", "Ar to SEN - pressure data"),
         ("read_binary/casting_program_parser.py", f"raw_data/{date}.OPCB", "Casting program data"),
-        ("read_binary/tundish_pos_rel_parser.py", f"raw_data/{date}.OPCB", "Tundish pos (rel) data")
+        ("read_binary/tundish_pos_rel_parser.py", f"raw_data/{date}.OPCB", "Tundish pos (rel) data"),
+        ("read_binary/mould_level_parser.py", f"raw_data/{date}.OPCB", "Mould level data")
     ]
     
     success_count = 0

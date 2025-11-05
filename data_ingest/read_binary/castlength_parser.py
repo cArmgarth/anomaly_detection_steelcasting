@@ -7,6 +7,7 @@ import pandas as pd
 from dataclasses import dataclass
 from typing import List, Tuple, Optional
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 
 
 LABVIEW_EPOCH = datetime(1904, 1, 1, tzinfo=timezone.utc)
@@ -92,7 +93,7 @@ def read_channel_series(f, channel: Channel) -> Tuple[List[float], List[float]]:
 	return times, vals
 
 
-def write_csv(out_path: str, timestamps: List[float], cast_vals: List[float], tz_offset_hours: int = 0):
+def write_parquet(out_path: str, timestamps: List[float], cast_vals: List[float], tz_offset_hours: int = 0):
 	os.makedirs(os.path.dirname(out_path), exist_ok=True)
 	
 	# Convert timestamps to proper datetime objects first
@@ -110,8 +111,8 @@ def write_csv(out_path: str, timestamps: List[float], cast_vals: List[float], tz
 	# Ensure datetime column is properly formatted
 	df['datetime'] = pd.to_datetime(df['datetime'], utc=True)
 	
-	# Save to CSV
-	df.to_csv(out_path, index=False)
+	# Save to Parquet (much faster and smaller than CSV)
+	df.to_parquet(out_path, index=False, engine='pyarrow')
 
 
 def find_channel(channels: List[Channel], substrings: List[str]) -> Optional[Channel]:
@@ -138,10 +139,20 @@ def main(argv: List[str]) -> int:
 
 		times, vals = read_channel_series(f, ch_cast)
 		base = os.path.splitext(os.path.basename(args.input_file))[0]
-		out = args.out or os.path.join('.', 'parsed_files', 'OPCB', f'{base}_castlength.csv')
+		out = args.out or os.path.join('.', 'parsed_files', 'OPCB', f'{base}_castlength.parquet')
 		# Bake in +2 hour local offset
-		write_csv(out, times, vals, tz_offset_hours=2)
-		print({'status': 'ok', 'out_csv': out, 'channel': ch_cast.name, 'tz_offset_hours': 2})
+		write_parquet(out, times, vals, tz_offset_hours=2)
+		
+		# Create/update metadata for OPCB files
+		output_dir = Path('./parsed_files/OPCB')
+		try:
+			from create_metadata_utils import update_parser_metadata
+			update_parser_metadata(output_dir, 'castlength', base)
+		except Exception as e:
+			# Don't fail if metadata creation fails
+			pass
+		
+		print({'status': 'ok', 'out_parquet': out, 'channel': ch_cast.name, 'tz_offset_hours': 2})
 		return 0
 
 

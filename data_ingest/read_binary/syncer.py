@@ -42,6 +42,7 @@ def create_partitioned_dataset_metadata(output_dir: Path, processed_dates: list)
             "ar_to_sen_pressure": "float64",
             "casting_program": "float64",
             "tundish_pos_rel": "float64",
+            "mould_level": "float64",
             "date": "date32"
         },
         "usage": {
@@ -109,7 +110,7 @@ def load_and_sync_data(target_dates=None):
     """Load parsed files and synchronize them."""
     
     # Find all available dates from parsed files
-    wistdb_files = list(Path("./parsed_files/WistDB_files").glob("*_wistDB_bfl.csv"))
+    wistdb_files = list(Path("./parsed_files/WistDB_files").glob("*_wistDB_bfl.parquet"))
     all_dates = []
     for file in wistdb_files:
         date_str = file.name.split('_')[0]  # Extract date from filename
@@ -137,12 +138,12 @@ def load_and_sync_data(target_dates=None):
         print(f"\nProcessing {date_str}...")
         
         # Load WistDB data (already BFL-only with required columns)
-        wistdb_file = Path(f"./parsed_files/WistDB_files/{date_str}_wistDB_bfl.csv")
+        wistdb_file = Path(f"./parsed_files/WistDB_files/{date_str}_wistDB_bfl.parquet")
         if not wistdb_file.exists():
             print(f"WARNING: WistDB file not found: {wistdb_file}")
             continue
             
-        bfl_df = pd.read_csv(wistdb_file)
+        bfl_df = pd.read_parquet(wistdb_file, engine='pyarrow')
         bfl_df['datetime'] = pd.to_datetime(bfl_df['datetime'], utc=True, errors='coerce')
         
         # Remove rows with invalid timestamps
@@ -151,21 +152,22 @@ def load_and_sync_data(target_dates=None):
         print(f"WistDB: {len(bfl_df)} BFL records")
         
         # Load OPCB data
-        castlength_file = Path(f"./parsed_files/OPCB/{date_str}_castlength.csv")
-        endofcast_file = Path(f"./parsed_files/OPCB/{date_str}_endofcast.csv")
-        sequences_file = Path(f"./parsed_files/OPCB/{date_str}_sequences.csv")
-        slabs_grade_file = Path(f"./parsed_files/OPCB/{date_str}_slabs_grade.csv")
-        rec_casting_speed_file = Path(f"./parsed_files/OPCB/{date_str}_rec_casting_speed.csv")
-        width_pv_file = Path(f"./parsed_files/OPCB/{date_str}_width_pv.csv")
-        deltatloose_file = Path(f"./parsed_files/OPCB/{date_str}_deltatloose.csv")
-        ar_to_sen_flow_file = Path(f"./parsed_files/OPCB/{date_str}_ar_to_sen_flow.csv")
-        ar_to_sen_pressure_file = Path(f"./parsed_files/OPCB/{date_str}_ar_to_sen_pressure.csv")
-        casting_program_file = Path(f"./parsed_files/OPCB/{date_str}_casting_program.csv")
-        tundish_pos_rel_file = Path(f"./parsed_files/OPCB/{date_str}_tundish_pos_rel.csv")
+        castlength_file = Path(f"./parsed_files/OPCB/{date_str}_castlength.parquet")
+        endofcast_file = Path(f"./parsed_files/OPCB/{date_str}_endofcast.parquet")
+        sequences_file = Path(f"./parsed_files/OPCB/{date_str}_sequences.parquet")
+        slabs_grade_file = Path(f"./parsed_files/OPCB/{date_str}_slabs_grade.parquet")
+        rec_casting_speed_file = Path(f"./parsed_files/OPCB/{date_str}_rec_casting_speed.parquet")
+        width_pv_file = Path(f"./parsed_files/OPCB/{date_str}_width_pv.parquet")
+        deltatloose_file = Path(f"./parsed_files/OPCB/{date_str}_deltatloose.parquet")
+        ar_to_sen_flow_file = Path(f"./parsed_files/OPCB/{date_str}_ar_to_sen_flow.parquet")
+        ar_to_sen_pressure_file = Path(f"./parsed_files/OPCB/{date_str}_ar_to_sen_pressure.parquet")
+        casting_program_file = Path(f"./parsed_files/OPCB/{date_str}_casting_program.parquet")
+        tundish_pos_rel_file = Path(f"./parsed_files/OPCB/{date_str}_tundish_pos_rel.parquet")
+        mould_level_file = Path(f"./parsed_files/OPCB/{date_str}_mould_level.parquet")
         
         # Load castlength
         if castlength_file.exists():
-            cl_df = pd.read_csv(castlength_file)
+            cl_df = pd.read_parquet(castlength_file, engine='pyarrow')
             cl_df['datetime'] = pd.to_datetime(cl_df['datetime'], utc=True, errors='coerce')
             cl_df = cl_df.dropna(subset=['datetime'])
             cl_df = cl_df[['datetime', 'cast_length_m']].copy()
@@ -176,7 +178,7 @@ def load_and_sync_data(target_dates=None):
         
         # Load endofcast
         if endofcast_file.exists():
-            eoc_df = pd.read_csv(endofcast_file)
+            eoc_df = pd.read_parquet(endofcast_file, engine='pyarrow')
             eoc_df['datetime'] = pd.to_datetime(eoc_df['datetime'], utc=True, errors='coerce')
             eoc_df = eoc_df.dropna(subset=['datetime'])
             eoc_df = eoc_df[['datetime', 'end_of_cast']].copy()
@@ -187,7 +189,7 @@ def load_and_sync_data(target_dates=None):
         
         # Load sequences
         if sequences_file.exists():
-            seq_df = pd.read_csv(sequences_file)
+            seq_df = pd.read_parquet(sequences_file, engine='pyarrow')
             seq_df['datetime'] = pd.to_datetime(seq_df['datetime'], utc=True, errors='coerce')
             seq_df = seq_df.dropna(subset=['datetime'])
             seq_df = seq_df[['datetime', 'sequence_id']].copy()
@@ -198,7 +200,7 @@ def load_and_sync_data(target_dates=None):
         
         # Load slabs grade
         if slabs_grade_file.exists():
-            sg_df = pd.read_csv(slabs_grade_file)
+            sg_df = pd.read_parquet(slabs_grade_file, engine='pyarrow')
             sg_df['datetime'] = pd.to_datetime(sg_df['datetime'], utc=True, errors='coerce')
             sg_df = sg_df.dropna(subset=['datetime'])
             sg_df = sg_df[['datetime', 'slabs_grade']].copy()
@@ -209,7 +211,7 @@ def load_and_sync_data(target_dates=None):
         
         # Load rec casting speed
         if rec_casting_speed_file.exists():
-            rcs_df = pd.read_csv(rec_casting_speed_file)
+            rcs_df = pd.read_parquet(rec_casting_speed_file, engine='pyarrow')
             rcs_df['datetime'] = pd.to_datetime(rcs_df['datetime'], utc=True, errors='coerce')
             rcs_df = rcs_df.dropna(subset=['datetime'])
             rcs_df = rcs_df[['datetime', 'rec_casting_speed']].copy()
@@ -220,7 +222,7 @@ def load_and_sync_data(target_dates=None):
         
         # Load width (pv)
         if width_pv_file.exists():
-            wpv_df = pd.read_csv(width_pv_file)
+            wpv_df = pd.read_parquet(width_pv_file, engine='pyarrow')
             wpv_df['datetime'] = pd.to_datetime(wpv_df['datetime'], utc=True, errors='coerce')
             wpv_df = wpv_df.dropna(subset=['datetime'])
             wpv_df = wpv_df[['datetime', 'width_pv']].copy()
@@ -231,7 +233,7 @@ def load_and_sync_data(target_dates=None):
         
         # Load deltatloose
         if deltatloose_file.exists():
-            dtl_df = pd.read_csv(deltatloose_file)
+            dtl_df = pd.read_parquet(deltatloose_file, engine='pyarrow')
             dtl_df['datetime'] = pd.to_datetime(dtl_df['datetime'], utc=True, errors='coerce')
             dtl_df = dtl_df.dropna(subset=['datetime'])
             dtl_df = dtl_df[['datetime', 'deltatloose']].copy()
@@ -242,7 +244,7 @@ def load_and_sync_data(target_dates=None):
         
         # Load Ar to SEN - flow
         if ar_to_sen_flow_file.exists():
-            atsf_df = pd.read_csv(ar_to_sen_flow_file)
+            atsf_df = pd.read_parquet(ar_to_sen_flow_file, engine='pyarrow')
             atsf_df['datetime'] = pd.to_datetime(atsf_df['datetime'], utc=True, errors='coerce')
             atsf_df = atsf_df.dropna(subset=['datetime'])
             atsf_df = atsf_df[['datetime', 'ar_to_sen_flow']].copy()
@@ -253,7 +255,7 @@ def load_and_sync_data(target_dates=None):
         
         # Load Ar to SEN - pressure
         if ar_to_sen_pressure_file.exists():
-            atsp_df = pd.read_csv(ar_to_sen_pressure_file)
+            atsp_df = pd.read_parquet(ar_to_sen_pressure_file, engine='pyarrow')
             atsp_df['datetime'] = pd.to_datetime(atsp_df['datetime'], utc=True, errors='coerce')
             atsp_df = atsp_df.dropna(subset=['datetime'])
             atsp_df = atsp_df[['datetime', 'ar_to_sen_pressure']].copy()
@@ -264,7 +266,7 @@ def load_and_sync_data(target_dates=None):
         
         # Load casting program
         if casting_program_file.exists():
-            cp_df = pd.read_csv(casting_program_file)
+            cp_df = pd.read_parquet(casting_program_file, engine='pyarrow')
             cp_df['datetime'] = pd.to_datetime(cp_df['datetime'], utc=True, errors='coerce')
             cp_df = cp_df.dropna(subset=['datetime'])
             cp_df = cp_df[['datetime', 'casting_program']].copy()
@@ -275,7 +277,7 @@ def load_and_sync_data(target_dates=None):
         
         # Load tundish pos (rel)
         if tundish_pos_rel_file.exists():
-            tpr_df = pd.read_csv(tundish_pos_rel_file)
+            tpr_df = pd.read_parquet(tundish_pos_rel_file, engine='pyarrow')
             tpr_df['datetime'] = pd.to_datetime(tpr_df['datetime'], utc=True, errors='coerce')
             tpr_df = tpr_df.dropna(subset=['datetime'])
             tpr_df = tpr_df[['datetime', 'tundish_pos_rel']].copy()
@@ -283,6 +285,17 @@ def load_and_sync_data(target_dates=None):
         else:
             tpr_df = None
             print("Tundish pos (rel): No data")
+        
+        # Load mould level
+        if mould_level_file.exists():
+            ml_df = pd.read_parquet(mould_level_file, engine='pyarrow')
+            ml_df['datetime'] = pd.to_datetime(ml_df['datetime'], utc=True, errors='coerce')
+            ml_df = ml_df.dropna(subset=['datetime'])
+            ml_df = ml_df[['datetime', 'mould_level']].copy()
+            print(f"Mould level: {len(ml_df)} records")
+        else:
+            ml_df = None
+            print("Mould level: No data")
         
         # Synchronize data for this date
         synced_df = bfl_df.copy()
@@ -295,7 +308,8 @@ def load_and_sync_data(target_dates=None):
             ('deltatloose', dtl_df),
             ('ar_to_sen_flow', atsf_df),
             ('ar_to_sen_pressure', atsp_df),
-            ('tundish_pos_rel', tpr_df)
+            ('tundish_pos_rel', tpr_df),
+            ('mould_level', ml_df)
         ]
         
         # Parameters that use backward merge (discrete/event-based values)

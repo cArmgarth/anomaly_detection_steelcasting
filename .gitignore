@@ -1,0 +1,12 @@
+# Python
+.venv
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Project-specific data directories
+/data_ingest/parsed_files
+/data_ingest/raw_data
+/data_ingest/data_cleaning/cleaned_data

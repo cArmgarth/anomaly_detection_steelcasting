@@ -24,6 +24,13 @@ def filter_runs(df: pl.LazyFrame) -> pl.LazyFrame:
     """
     Filter data to extract only casting runs.
     
+    Filters applied:
+    - Only sequences with casting_program 5 or 7
+    - Only sequences with width_pv == 1700
+    - Only complete sequences (cast_length_m starts < 2)
+    - Only runs from sequence_id start to end_of_cast == 1
+    - Only sequences with at least 10 rows (meaningful casting runs)
+    
     Args:
         df: Polars LazyFrame with synced data
         
@@ -42,7 +49,32 @@ def filter_runs(df: pl.LazyFrame) -> pl.LazyFrame:
         .sort("datetime")
     )
     
-    # Step 2: For each sequence_id, find first end_of_cast == 1
+    # Step 2: Filter by casting_program (5 or 7) and width_pv (1700)
+    logger.info("Filtering by casting_program (5 or 7) and width_pv (1700)...")
+    runs_df = runs_df.filter(
+        (pl.col("casting_program").is_in([5, 7])) &
+        (pl.col("width_pv") == 1700)
+    )
+    
+    # Step 3: Filter out incomplete sequences
+    # A sequence is incomplete if cast_length_m at the start is >= 2
+    logger.info("Filtering out incomplete sequences (cast_length_m start >= 2)...")
+    runs_df = (
+        runs_df
+        .with_columns([
+            # Find minimum cast_length_m for each sequence_id
+            pl.col("cast_length_m")
+            .min()
+            .over("sequence_id")
+            .alias("min_cast_length")
+        ])
+        # Keep only sequences where min_cast_length < 2
+        .filter(pl.col("min_cast_length") < 2)
+        # Drop helper column
+        .drop("min_cast_length")
+    )
+    
+    # Step 4: For each sequence_id, find first end_of_cast == 1
     # and keep all rows up to and including that row
     runs_df = (
         runs_df
@@ -63,6 +95,21 @@ def filter_runs(df: pl.LazyFrame) -> pl.LazyFrame:
         .drop("first_eoc_dt")
     )
     
+    # Step 5: Filter out sequences with too few rows (not meaningful casting runs)
+    # A sequence should have at least 10 rows to be considered valid
+    logger.info("Filtering out sequences with too few rows (< 10)...")
+    runs_df = (
+        runs_df
+        .with_columns([
+            # Count rows per sequence_id (count non-null sequence_id values per group)
+            pl.col("sequence_id").count().over("sequence_id").alias("seq_row_count")
+        ])
+        # Keep only sequences with at least 10 rows
+        .filter(pl.col("seq_row_count") >= 10)
+        # Drop helper column
+        .drop("seq_row_count")
+    )
+    
     return runs_df
 
 
@@ -78,7 +125,7 @@ def create_partitioned_dataset_metadata(output_dir: Path, processed_dates: list)
             "start": min(processed_dates),
             "end": max(processed_dates)
         },
-        "description": "Cleaned casting run data - filtered to extract only run data (from sequence_id start to end_of_cast==1)",
+        "description": "Cleaned casting run data - filtered to extract only run data (from sequence_id start to end_of_cast==1). Additional filters: casting_program in [5, 7], width_pv == 1700, only complete sequences (cast_length_m start < 2), and only sequences with at least 10 rows",
         "usage": {
             "polars": "pl.scan_parquet('data_cleaning/cleaned_data/*.parquet')",
             "pandas": "pd.read_parquet('data_cleaning/cleaned_data/', engine='pyarrow')",

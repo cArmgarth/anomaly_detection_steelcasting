@@ -156,15 +156,15 @@ print(f"Found {len(anomalies)} anomalies")
 
 The model directory must contain:
 
-- `isolation_forest.joblib`: Trained Isolation Forest model
-- `scaler.joblib`: Fitted StandardScaler
-- `feature_columns.json`: List of feature column names
-- `label_encoders.joblib`: (Optional) Label encoders for categorical features
-- `model_metadata.json`: (Optional) Model metadata
+- `isolation_forest.joblib`: Trained Isolation Forest model (required)
+- `scaler.joblib`: Fitted StandardScaler (required)
+- `feature_columns.json`: List of feature column names (required)
+- `label_encoders.joblib`: Label encoders for categorical features (optional - will be created if missing)
+- `model_metadata.json`: Model metadata (optional)
 
 ## Notes
 
-- The pipeline automatically handles missing encoders (will create new ones if needed)
+- **Missing encoders**: If `label_encoders.joblib` is not found, the pipeline will create new encoders during feature preparation. This works fine as long as the categorical values in your inference data match those seen during training. If you encounter unseen categorical values, they will be encoded as -1.
 - Feature attribution requires additional computation but provides valuable insights
 - All intermediate files are saved to `inference/temp/` for debugging
 - The pipeline preserves all metadata (sequence_id, cycle_id, timestamps) for traceability

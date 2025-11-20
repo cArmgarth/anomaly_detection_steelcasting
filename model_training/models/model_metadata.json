@@ -1,0 +1,17 @@
+{
+  "model_type": "IsolationForest",
+  "contamination": 0.1,
+  "n_estimators": 100,
+  "n_features": 1136,
+  "n_train_samples": 105648,
+  "n_test_samples": 13382,
+  "n_train_sequences": 14,
+  "n_test_sequences": 4,
+  "train_split": 0.8,
+  "n_train_anomalies": 10565,
+  "n_test_anomalies": 1283,
+  "train_anomaly_rate": 0.10000189307890353,
+  "test_anomaly_rate": 0.09587505604543417,
+  "n_anomaly_types": 5,
+  "trained_at": "2025-11-17T10:34:43.690759"
+}

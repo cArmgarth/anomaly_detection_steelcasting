@@ -30,6 +30,8 @@ def filter_runs(df: pl.LazyFrame) -> pl.LazyFrame:
     - Only complete sequences (cast_length_m starts < 2)
     - Only runs from sequence_id start to end_of_cast == 1
     - Only sequences with at least 10 rows (meaningful casting runs)
+    - Remove first 20 meters of casting (volatile beginning)
+    - Remove last 10 meters of casting (volatile end)
     
     Args:
         df: Polars LazyFrame with synced data
@@ -110,6 +112,42 @@ def filter_runs(df: pl.LazyFrame) -> pl.LazyFrame:
         .drop("seq_row_count")
     )
     
+    # Step 6: Remove first 20 meters of casting (volatile beginning)
+    logger.info("Removing first 20 meters of casting from each sequence...")
+    runs_df = runs_df.filter(pl.col("cast_length_m") >= 20)
+    
+    # Step 7: Remove last 10 meters of casting (volatile end)
+    logger.info("Removing last 10 meters of casting from each sequence...")
+    runs_df = (
+        runs_df
+        .with_columns([
+            # Find maximum cast_length_m for each sequence_id
+            pl.col("cast_length_m")
+            .max()
+            .over("sequence_id")
+            .alias("max_cast_length")
+        ])
+        # Keep only rows where cast_length_m is at least 10 meters before the max
+        .filter(pl.col("cast_length_m") <= (pl.col("max_cast_length") - 10))
+        # Drop helper column
+        .drop("max_cast_length")
+    )
+    
+    # Step 8: Re-check sequences after removing first 20 meters and last 10 meters
+    # Some sequences might now have too few rows
+    logger.info("Re-checking sequences after removing first 20m and last 10m...")
+    runs_df = (
+        runs_df
+        .with_columns([
+            # Count rows per sequence_id after filtering
+            pl.col("sequence_id").count().over("sequence_id").alias("seq_row_count")
+        ])
+        # Keep only sequences with at least 10 rows
+        .filter(pl.col("seq_row_count") >= 10)
+        # Drop helper column
+        .drop("seq_row_count")
+    )
+    
     return runs_df
 
 
@@ -125,7 +163,7 @@ def create_partitioned_dataset_metadata(output_dir: Path, processed_dates: list)
             "start": min(processed_dates),
             "end": max(processed_dates)
         },
-        "description": "Cleaned casting run data - filtered to extract only run data (from sequence_id start to end_of_cast==1). Additional filters: casting_program in [5, 7], width_pv == 1700, only complete sequences (cast_length_m start < 2), and only sequences with at least 10 rows",
+        "description": "Cleaned casting run data - filtered to extract only run data (from sequence_id start to end_of_cast==1). Additional filters: casting_program in [5, 7], width_pv == 1700, only complete sequences (cast_length_m start < 2), only sequences with at least 10 rows, first 20 meters of casting removed (volatile beginning), and last 10 meters of casting removed (volatile end)",
         "usage": {
             "polars": "pl.scan_parquet('data_cleaning/cleaned_data/*.parquet')",
             "pandas": "pd.read_parquet('data_cleaning/cleaned_data/', engine='pyarrow')",

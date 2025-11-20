@@ -10,3 +10,8 @@ __pycache__/
 /data_ingest/parsed_files
 /data_ingest/raw_data
 /data_ingest/data_cleaning/cleaned_data
+/model_training/models/test_set_anomalies_with_ports.csv
+/model_training/models/test_set_anomalies.csv
+/model_training/models/test_set_evaluation_summary.json
+/model_training/models/anomaly_predictions.parquet
+/feature_engineering/vectorized
